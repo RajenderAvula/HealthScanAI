@@ -24,18 +24,54 @@ jobs:
         with:
           gradle-version: '9.6.0'
 
-      - name: Build Debug APK
+      - name: Verify environment
         run: |
-          gradle assembleDebug --no-daemon --stacktrace
+          echo "===== JAVA ====="
+          java -version
+
+          echo "===== GRADLE ====="
+          gradle --version
+
+          echo "===== PROJECT ====="
+          pwd
+          ls -la
+
+      - name: Build Debug APK
+        id: build
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          gradle assembleDebug --no-daemon --stacktrace --info 2>&1 | tee gradle-build.log
+          echo "BUILD_EXIT_CODE=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Show build result
+        run: |
+          echo "===== BUILD RESULT ====="
+          echo "Exit code: ${{ steps.build.outputs.BUILD_EXIT_CODE }}"
+
+          echo "===== LAST 200 LINES ====="
+          tail -n 200 gradle-build.log
+
+      - name: Upload Gradle log
+        uses: actions/upload-artifact@v4
+        with:
+          name: HealthScanAI-gradle-log
+          path: gradle-build.log
+          if-no-files-found: error
+
+      - name: Fail if build failed
+        if: steps.build.outputs.BUILD_EXIT_CODE != '0'
+        run: |
+          echo "Gradle build failed."
+          exit 1
 
       - name: Show APK
-        if: success()
+        if: steps.build.outputs.BUILD_EXIT_CODE == '0'
         run: |
-          echo "APK files:"
           find app/build/outputs -type f -print
 
       - name: Upload Debug APK
-        if: success()
+        if: steps.build.outputs.BUILD_EXIT_CODE == '0'
         uses: actions/upload-artifact@v4
         with:
           name: HealthScanAI-debug-apk
